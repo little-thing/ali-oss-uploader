@@ -4,7 +4,7 @@ const { Buffer } = require("buffer");
 const OSS = require("ali-oss");
 
 const app = express();
-const path = require("path");
+const bodyParser = require("body-parser");
 
 const config = {
   internal: false,
@@ -62,8 +62,11 @@ app.get("/", async (req, res) => {
   res.json(params);
 });
 
+var urlencodedParser = bodyParser.urlencoded({ extended: false })
+var jsonParser = bodyParser.json()
+var rawParser = bodyParser.text()
 //接收回掉
-app.post("/result", (req, res) => {
+app.post("/oss/upload/result",jsonParser, (req, res) => {
   //公钥地址
   const pubKeyAddr = Buffer.from(
     req.headers["x-oss-pub-key-url"],
@@ -80,7 +83,7 @@ app.post("/result", (req, res) => {
   res.json({ Status: "Ok" });
 });
 
-app.listen(9000, () => {
-  console.log("http://127.0.0.1:9000");
+app.listen(3669, () => {
+  console.log("http://127.0.0.1:3669");
   console.log("App of postObject started.");
 });

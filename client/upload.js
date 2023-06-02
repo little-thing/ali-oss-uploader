@@ -1,150 +1,112 @@
+const map = new Map();
 
-accessid = ''
-accesskey = ''
-host = ''
-policyBase64 = ''
-signature = ''
-callbackbody = ''
-filename = ''
-key = ''
-expire = 0
-g_object_name = ''
-g_object_name_type = ''
-now = timestamp = Date.parse(new Date()) / 1000;
-
-function send_request()
+async function send_request(filename)
 {
-    var xmlhttp = null;
-    if (window.XMLHttpRequest)
-    {
-        xmlhttp=new XMLHttpRequest();
-    }
-    else if (window.ActiveXObject)
-    {
-        xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
-    }
 
-    if (xmlhttp!=null)
-    {
-        // serverUrl是 用户获取 '签名和Policy' 等信息的应用服务器的URL，请将下面的IP和Port配置为您自己的真实信息。
-        serverUrl = 'http://127.0.0.1:9000'
-
-        xmlhttp.open( "GET", serverUrl, false );
-        xmlhttp.send( null );
-        return xmlhttp.responseText
-    }
-    else
-    {
-        alert("Your browser does not support XMLHTTP.");
-    }
-};
-
-function check_object_radio() {
-    var tt = document.getElementsByName('myradio');
-    for (var i = 0; i < tt.length ; i++ )
-    {
-        if(tt[i].checked)
+    return new Promise((resolve, reject) => {
+        var xmlhttp = null;
+        if (window.XMLHttpRequest)
         {
-            g_object_name_type = tt[i].value;
-            break;
+            xmlhttp=new XMLHttpRequest();
         }
-    }
+        else if (window.ActiveXObject)
+        {
+            xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
+        }
+
+        if (xmlhttp!=null)
+        {
+            // serverUrl是 用户获取 '签名和Policy' 等信息的应用服务器的URL，请将下面的IP和Port配置为您自己的真实信息。
+            let serverUrl = 'http://localhost:3666/assets/attachment/generateSign'
+            var requestBody ={
+                "from":"attachment",
+                "tableId":"tblvAbYVRp3k0g0Gl",
+                "columnId":"fldwIZP7qWl84EYas",
+                "filename":filename
+            };
+
+            var requestBodyString = JSON.stringify(requestBody);
+
+            xmlhttp.open( "POST", serverUrl, true);
+            xmlhttp.setRequestHeader("Content-Type", "application/json");
+            xmlhttp.send(requestBodyString);
+
+            xmlhttp.onreadystatechange = ()=>{
+                if (xmlhttp.readyState==4 && xmlhttp.status==200)
+                {
+                    console.log(xmlhttp.responseText);
+                    resolve( xmlhttp.responseText)
+                }
+
+            }
+
+
+        }
+        else
+        {
+            reject("Your browser does not support XMLHTTP.")
+        }
+    })
+
 }
 
-function get_signature()
+
+async function get_signature(id,filename)
 {
+    let param = map.get(id);
+
+
     // 可以判断当前expire是否超过了当前时间， 如果超过了当前时间， 就重新取一下，3s 作为缓冲。
-    now = timestamp = Date.parse(new Date()) / 1000;
-    if (expire < now + 3)
+    let now = timestamp = Date.parse(new Date()) / 1000;
+    if (!param||param.expire < now + 3)
     {
-        body = send_request()
-        var obj = eval ("(" + body + ")");
-        host = obj['host']
-        policyBase64 = obj['policy']
-        accessid = obj['accessid']
-        signature = obj['signature']
-        expire = parseInt(obj['expire'])
-        callbackbody = obj['callback']
-        key = obj['dir']
-        return true;
-    }
-    return false;
-};
+        const body = await send_request(filename);
+        var {data:obj} = eval ("(" + body + ")");
 
-function random_string(len) {
-　　len = len || 32;
-　　var chars = 'ABCDEFGHJKMNPQRSTWXYZabcdefhijkmnprstwxyz2345678';
-　　var maxPos = chars.length;
-　　var pwd = '';
-　　for (i = 0; i < len; i++) {
-    　　pwd += chars.charAt(Math.floor(Math.random() * maxPos));
+        console.log(obj);
+        let host = obj['host']
+        let policyBase64 = obj['policy']
+        let accessid = obj['accessid']
+        let signature = obj['signature']
+        let expire = parseInt(obj['expire'])
+        let callbackbody = obj['callback']
+        let g_object_name = obj['objectPath']
+
+        param = {
+            host,policyBase64,accessid,signature,expire,callbackbody,g_object_name
+        };
+
+        map.set(id,param)
     }
-    return pwd;
+
+    return param;
 }
 
-function get_suffix(filename) {
-    pos = filename.lastIndexOf('.')
-    suffix = ''
-    if (pos != -1) {
-        suffix = filename.substring(pos)
-    }
-    return suffix;
-}
 
-function calculate_object_name(filename)
+
+
+
+function set_upload_param(up,id, filename)
 {
-    if (g_object_name_type == 'local_name')
-    {
-        g_object_name += "${filename}"
-    }
-    else if (g_object_name_type == 'random_name')
-    {
-        suffix = get_suffix(filename)
-        g_object_name = key + random_string(10) + suffix
-    }
-    return ''
-}
+    get_signature(id,filename).then(data=>{
+        console.log(data);
+        let new_multipart_params = {
+            'key' : data.g_object_name,
+            'policy': data.policyBase64,
+            'OSSAccessKeyId': data.accessid,
+            'success_action_status' : '200', //让服务端返回200,不然，默认会返回204
+            'callback' : data.callbackbody,
+            'signature': data.signature,
+        };
 
-function get_uploaded_object_name(filename)
-{
-    if (g_object_name_type == 'local_name')
-    {
-        tmp_name = g_object_name
-        tmp_name = tmp_name.replace("${filename}", filename);
-        return tmp_name
-    }
-    else if(g_object_name_type == 'random_name')
-    {
-        return g_object_name
-    }
-}
+        up.setOption({
+            'url': data.host,
+            'multipart_params': new_multipart_params
+        });
 
-function set_upload_param(up, filename, ret)
-{
-    if (ret == false)
-    {
-        ret = get_signature()
-    }
-    g_object_name = key;
-    if (filename != '') {
-        suffix = get_suffix(filename)
-        calculate_object_name(filename)
-    }
-    new_multipart_params = {
-        'key' : 'test.jpg',
-        'policy': policyBase64,
-        'OSSAccessKeyId': accessid,
-        'success_action_status' : '200', //让服务端返回200,不然，默认会返回204
-        'callback' : callbackbody,
-        'signature': signature,
-    };
+        up.start();
+    })
 
-    up.setOption({
-        'url': host,
-        'multipart_params': new_multipart_params
-    });
-
-    up.start();
 }
 
 var uploader = new plupload.Uploader({
@@ -157,21 +119,18 @@ var uploader = new plupload.Uploader({
     url : 'http://oss.aliyuncs.com',
 
     filters: {
-        mime_types : [ //只允许上传图片和zip文件
-        { title : "Image files", extensions : "jpg,gif,png,bmp" },
-        { title : "Zip files", extensions : "zip,rar" }
-        ],
         max_file_size : '10mb', //最大只能上传10mb的文件
         prevent_duplicates : true //不允许选取重复文件
     },
 
 	init: {
-		PostInit: function() {
+		PostInit: function(up) {
 			document.getElementById('ossfile').innerHTML = '';
-			document.getElementById('postfiles').onclick = function() {
-            set_upload_param(uploader, '', false);
-            return false;
-			};
+            document.getElementById('postfiles').onclick = function() {
+                console.log();
+                set_upload_param(up,up.files[0].id,up.files[0].name);
+                return false;
+            };
 		},
 
 		FilesAdded: function(up, files) {
@@ -183,8 +142,7 @@ var uploader = new plupload.Uploader({
 		},
 
 		BeforeUpload: function(up, file) {
-            check_object_radio();
-            set_upload_param(up, file.name, true);
+           return  set_upload_param(up, file.id,file.name);
         },
 
 		UploadProgress: function(up, file) {
@@ -199,7 +157,7 @@ var uploader = new plupload.Uploader({
 		FileUploaded: function(up, file, info) {
             if (info.status == 200)
             {
-                document.getElementById(file.id).getElementsByTagName('b')[0].innerHTML = 'upload to oss success, object name:' + get_uploaded_object_name(file.name) + ' 回调服务器返回的内容是:' + info.response;
+                document.getElementById(file.id).getElementsByTagName('b')[0].innerHTML = 'upload to oss success, object name:' + map.get(file.id).g_object_name + ' 回调服务器返回的内容是:' + info.response;
             }
             else if (info.status == 203)
             {
